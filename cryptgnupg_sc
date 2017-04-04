@@ -1,0 +1,93 @@
+#!/bin/sh
+ 
+set -e
+ 
+PREREQ="cryptroot"
+ 
+prereqs()
+{
+        echo "$PREREQ"
+}
+ 
+case $1 in
+prereqs)
+        prereqs
+        exit 0
+        ;;
+esac
+ 
+. /usr/share/initramfs-tools/hook-functions
+ 
+# Hooks for loading Gnupg software and key into the initramfs
+
+# Check whether cryptroot hook has installed decrypt_gnupg_sc script
+if [ ! -x ${DESTDIR}/lib/cryptsetup/scripts/decrypt_gnupg_sc ] ; then
+    exit 0
+fi
+ 
+# Install cryptroot key files into initramfs
+keys=$(sed 's/^\(.*,\|\)key=//; s/,.*//' ${DESTDIR}/conf/conf.d/cryptroot)
+
+if [ "${keys}" != "none" ]; then
+    if [ -z "${keys}" ]; then
+        echo "$0: Missing key files in ${DESTDIR}/conf/conf.d/cryptroot" >&2
+        cat ${DESTDIR}/conf/conf.d/cryptroot >&2
+        exit 1
+    fi
+    for key in ${keys} ; do
+        keydir=$(dirname ${key})
+        echo "WARNING: GnuPG key $key is copied to initramfs" >&2
+        if [ ! -d ${DESTDIR}/${keydir} ] ; then
+            mkdir -p ${DESTDIR}/${keydir}
+        fi
+        if [ ! -d ${DESTDIR}/${keydir}/private-keys-v1.d ] ; then
+            mkdir -p ${DESTDIR}/${keydir}/private-keys-v1.d
+        fi
+        chmod 700 ${DESTDIR}/${keydir}
+        cp -p ${key} ${DESTDIR}/${key}
+        cp -p ${keydir}/pubring.gpg ${DESTDIR}/${keydir}
+        cp -p ${keydir}/pubring.kbx ${DESTDIR}/${keydir}
+        cp -p ${keydir}/private-keys-v1.d/* ${DESTDIR}/${keydir}/private-keys-v1.d
+        cp -p ${keydir}/secring.gpg ${DESTDIR}/${keydir}
+        if [ -e ${keydir}/gpg.conf ] ; then
+            cp -p ${keydir}/gpg.conf ${DESTDIR}/${keydir}
+        fi
+        if [ -e ${keydir}/gpg-agent.conf ] ; then
+            cp -p ${keydir}/gpg-agent.conf ${DESTDIR}/${keydir}
+        fi
+    done
+fi
+ 
+# Install gnupg software
+
+[ -f /usr/bin/gpg1 ] && copy_exec /usr/bin/gpg1 || echo "/usr/bin/gpg1 does not exist."
+[ -f /usr/bin/gpg2 ] && copy_exec /usr/bin/gpg2 || echo "/usr/bin/gpg2 does not exist."
+[ -f /usr/bin/gpg-agent ] && copy_exec /usr/bin/gpg-agent || echo "/usr/bin/gpg-agent does not exist."
+[ -f /usr/bin/pinentry-tty ] && copy_exec /usr/bin/pinentry-tty || echo "/usr/bin/pinentry-tty does not exist."
+# Pfad ggf. anpassen
+[ -f /usr/lib/gnupg/scdaemon ] && copy_exec /usr/lib/gnupg/scdaemon || echo "/usr/lib/gnupg/scdaemon does not exist."
+ 
+# some more libs for pcscd
+# nur für Kartenleser benötigt, die nicht von dem gnupg-internen ccid unterstützt werden
+[ -f /usr/sbin/pcscd ] && copy_exec /usr/sbin/pcscd
+[ -f /usr/lib/pcsc/drivers/serial/libccidtwin.so ] && copy_exec /usr/lib/pcsc/drivers/serial/libccidtwin.so
+[ -f /usr/lib/pcsc/drivers/serial/libccidtwin.so ] && copy_exec /usr/lib/pcsc/drivers/ifd-ccid.bundle/Contents/Linux/libccid.so
+[ -f /usr/lib/pcsc/drivers/ifd-ccid.bundle/Contents/Info.plist ] && copy_exec /usr/lib/pcsc/drivers/ifd-ccid.bundle/Contents/Info.plist
+[ -f /etc/libccid_Info.plist ] && copy_exec /etc/libccid_Info.plist
+# ReinerSCT cyberJack
+[ -f /usr/lib/pcsc/drivers/libifd-cyberjack.bundle/Contents/Info.plist ] && copy_exec /usr/lib/pcsc/drivers/libifd-cyberjack.bundle/Contents/Info.plist
+[ -f /usr/lib/pcsc/drivers/libifd-cyberjack.bundle/Contents/PkgInfo ] && copy_exec /usr/lib/pcsc/drivers/libifd-cyberjack.bundle/Contents/PkgInfo
+[ -f /usr/lib/pcsc/drivers/libifd-cyberjack.bundle/Contents/Linux/libifd-cyberjack.a ] && copy_exec /usr/lib/pcsc/drivers/libifd-cyberjack.bundle/Contents/Linux/libifd-cyberjack.a
+[ -f /usr/lib/pcsc/drivers/libifd-cyberjack.bundle/Contents/Linux/libifd-cyberjack.la ] && copy_exec /usr/lib/pcsc/drivers/libifd-cyberjack.bundle/Contents/Linux/libifd-cyberjack.la
+[ -f /usr/lib/pcsc/drivers/libifd-cyberjack.bundle/Contents/Linux/libifd-cyberjack.so ] && copy_exec /usr/lib/pcsc/drivers/libifd-cyberjack.bundle/Contents/Linux/libifd-cyberjack.so
+[ -f /usr/lib/pcsc/drivers/libifd-cyberjack.bundle/Contents/Linux/libifd-cyberjack.so.6 ] && copy_exec /usr/lib/pcsc/drivers/libifd-cyberjack.bundle/Contents/Linux/libifd-cyberjack.so.6
+[ -f /usr/lib/pcsc/drivers/libifd-cyberjack.bundle/Contents/Linux/libifd-cyberjack.so.6.0.0 ] && copy_exec /usr/lib/pcsc/drivers/libifd-cyberjack.bundle/Contents/Linux/libifd-cyberjack.so.6.0.0
+[ -f /etc/cyberjack/cyberjack.conf ] && copy_exec /etc/cyberjack/cyberjack.conf
+if uname -r | grep -q amd64; then	
+        [ -f /usr/lib/x86_64-linux-gnu/libpcsclite.so.1.0.0 ] && copy_exec /usr/lib/x86_64-linux-gnu/libpcsclite.so.1.0.0
+        [ -f /lib/x86_64-linux-gnu/libgcc_s.so.1 ] && copy_exec /lib/x86_64-linux-gnu/libgcc_s.so.1
+else
+        [ -f /usr/lib/i386-linux-gnu/libpcsclite.so.1.0.0 ] && copy_exec /usr/lib/i386-linux-gnu/libpcsclite.so.1.0.0
+        [ -f /lib/i386-linux-gnu/libgcc_s.so.1 ] && copy_exec /lib/i386-linux-gnu/libgcc_s.so.1
+fi
+exit 0

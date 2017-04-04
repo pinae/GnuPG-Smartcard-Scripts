@@ -1,0 +1,33 @@
+#!/bin/sh
+ 
+# quick hack for starting pcscd
+# nur für Kartenleser benötigt, die nicht von dem gnupg-internen ccid unterstützt werden
+mkdir -p /var/run
+pcscd &
+ 
+decrypt_gpg () {
+        echo "Performing GPG key decryption ..." >&2
+	/usr/bin/gpg1 --card-status >&2
+
+        if ! /lib/cryptsetup/askpass \
+                "Enter smartcard PIN or passphrase for key $1: " | \
+                /usr/bin/gpg1 --quiet --batch --homedir "$(dirname $1)" \
+                --trustdb-name /dev/null --passphrase-fd 0 --decrypt $1; then
+                return 1
+        fi
+
+        return 0
+}
+ 
+if [ ! -x /usr/bin/gpg1 ]; then
+        echo "$0: /usr/bin/gpg1 is not available" >&2
+        exit 1
+fi
+ 
+if [ -z "$1" ]; then
+        echo "$0: missing key as argument" >&2
+        exit 1
+fi
+ 
+decrypt_gpg "$1"
+exit $?

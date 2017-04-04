@@ -1,0 +1,142 @@
+#!/bin/sh
+# Sample script for scdaemon event mechanism.
+
+exec >>/tmp/scd-event.log
+
+PGM=scd-event
+
+reader_port=
+old_code=0x0000
+new_code=0x0000
+status=
+
+tick='`'
+prev=
+while [ $# -gt 0 ]; do
+  arg="$1"
+  case $arg in
+      -*=*) optarg=$(echo "X$arg" | sed -e '1s/^X//' -e 's/[-_a-zA-Z0-9]*=//')
+            ;;
+         *) optarg=
+            ;;
+  esac
+  if [ -n "$prev" ]; then
+    eval "$prev=\$arg"
+    prev=
+    shift
+    continue
+  fi
+  case $arg in
+      --help|-h)
+          cat <<EOF
+Usage: $PGM [options]
+$PGM is called by scdaemon on card reader status changes
+
+Options:
+  --reader-port N        Reports change for port N
+  --old-code 0xNNNN      Previous status code
+  --old-code 0xNNNN      Current status code
+  --status USABLE|ACTIVE|PRESENT|NOCARD 
+                         Human readable status code
+
+Environment:
+
+GNUPGHOME=DIR            Set to the active homedir
+
+EOF
+          exit 0
+          ;;
+    
+      --reader-port)  
+          prev=reader_port
+          ;;
+      --reader-port=*)
+          reader_port="$optarg"
+          ;;
+      --old-code)  
+          prev=old_code
+          ;;
+      --old-code=*)
+          old_code="$optarg"
+          ;;
+      --new-code)  
+          prev=new_code
+          ;;
+      --new-code=*)
+          new_code="$optarg"
+          ;;
+      --status)  
+          prev=status
+          ;;
+      --new-code=*)
+          status="$optarg"
+          ;;
+
+      -*)
+          echo "$PGM: invalid option $tick$arg'" >&2
+          exit 1
+          ;;
+
+      *)
+          break
+          ;;
+  esac
+  shift
+done
+if [ -n "$prev" ]; then
+  echo "$PGM: argument missing for option $tick$prev'" >&2
+  exit 1
+fi
+
+cat <<EOF
+========================
+port:     $reader_port
+old-code: $old_code
+new-code: $new_code
+status:   $status
+EOF
+
+# Aktivieren den Bildschirmschoner mit Passwortschutz, wenn die Smartcard entfernt wird
+if [ x$status = xNOCARD -a x$prev != xNOCARD ]; then
+  xscreensaver-command -l
+	echo x$status	
+	while [ `/usr/bin/gpg2 --batch --card-status | grep '^[ESA].*key.*'|grep ^Signature|wc -l` -ne 1 ]
+	do
+		echo "Keine gültige OpenPGP-Card vorhanden"
+		sleep .5
+	done
+fi
+
+# Funktion, um den Bildschirmschoner mit Passwortschutz zu deaktivieren
+
+if [ x$status = xUSABLE ]; then
+    gpg2 --batch --card-status 2>&1
+fi
+
+function screenunlock {
+
+  # Schlüssel der eingelegten Karte auslesen
+  /usr/bin/gpg2 --batch --card-status | grep '^[ESA].*key.*' > $HOME/.gnupg/.readcard
+  # Vergleichen mit hinterlegten Daten  
+  if ( cmp $HOME/.gnupg/.mycard $HOME/.gnupg/.readcard ) || ( cmp $HOME/.gnupg/.myoldcard $HOME/.gnupg/.readcard ); then
+    # Bildschirmschoner unsauber beenden
+    killall xscreensaver
+    # und wieder neustarten
+    xscreensaver -no-splash &
+    # temporär ausgelesene Kartendaten löschen
+    rm $HOME/.gnupg/.readcard
+    # PIN abfragen (funktioniert seit Anfang 2017 nicht mehr transparent zu ssh)
+	/home/micha/bin/gpgpin.sh
+  fi
+}
+
+# für Geräte, welche pcscd benötigen
+if [ x$status = xUSABLE -a x$prev != xUSABLE ]; then
+  screenunlock
+fi
+
+# für Geräte, welche direkt von GnuPG2 unterstützt werden
+if [ x$status = xPRESENT -a x$prev != xPRESENT ]; then
+  screenunlock
+fi
+

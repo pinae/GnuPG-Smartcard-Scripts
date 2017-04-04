@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Exec=/usr/bin/gpg2 --card-status
+Hidden=false
+X-GNOME-Autostart-enabled=true
+Name[en_US]=InitializeSmartcard
+Name=InitializeSmartcard
+Comment[en_US]=Start gpg2 smartcard when GNOME starts
+Comment=Start gpg2 smartcard when GNOME starts
